@@ -1,2 +1,2 @@
 # docker-compose
-A collection of docker-compose files for various container stacks
+A collection of devops related files for various container stacks

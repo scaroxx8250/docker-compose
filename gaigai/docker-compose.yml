@@ -1,0 +1,104 @@
+version: '2.4'
+services:
+  caddy:
+    image: caddy:2
+    user: "0:1001"
+    restart: always
+    environment:
+      - PUID=0
+      - PGID=1001
+      - TZ=Asia/Singapore
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./volumes/wordpress:/app/wordpress
+      - ./volumes/laravel:/app/laravel
+      - ./volumes/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./volumes/caddy/config:/config
+      - ./volumes/caddy/data:/data
+  django:
+    image: python:3.10
+    user: "0:1001"
+    restart: always
+    entrypoint: ["/bin/sh","-c"]
+    command:
+      - |
+        cd /var/www/gaigai &&
+        pip install --no-cache-dir -r requirements.txt &&
+        python manage.py collectstatic --noinput --clear &&
+        python manage.py runserver 0.0.0.0:8000
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8000:8000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: 20m
+        max-file: "60"
+    volumes:
+      - "./volumes/django/src:/var/www/gaigai"
+  memcached:
+    image: memcached:1.6
+    restart: always
+    ports:
+      - "11211:11211"
+  nginx:
+    image: nginx
+    depends_on:
+      - "mysql"
+      - "php_fpm"
+    restart: always
+    ports:
+      - "8080:80"
+    volumes:
+      - ./volumes/wordpress:/app/wordpress
+      - ./volumes/laravel:/app/laravel
+      - ./volumes/nginx/app.conf:/etc/nginx/conf.d/app.conf
+  php_fpm:
+    image: bitnami/php-fpm:7.4
+    user: "0:1001"
+    restart: always
+    volumes:
+      - ./volumes/wordpress:/app/wordpress
+      - ./volumes/laravel:/app/laravel
+  mysql:
+    image: mysql:8
+    cap_add:
+      - SYS_NICE
+    user: "0:1001"
+    restart: always
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./volumes/mysql:/var/lib/mysql
+  opensearch:
+    image: opensearchproject/opensearch:latest
+    environment:
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g # minimum and maximum Java heap size, recommend setting both to 50% of system RAM
+    mem_limit: 2g
+    restart: always
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536 # maximum number of open files for the OpenSearch user, set to at least 65536 on modern systems
+        hard: 65536
+    volumes:
+      # Note: specifying a bind mount in Windows will fail due to perms issue in the container
+      # Solution: Use a Docker volume mount
+      - ./volumes/opensearch/data:/usr/share/opensearch/data
+      #- ./fidu-opensearch-snapshots:/mnt/snapshots
+      - ./volumes/opensearch/config/opensearch.yml:/usr/share/opensearch/config/opensearch.yml
+      - ./volumes/opensearch/securityconfig/internal_users.yml:/usr/share/opensearch/plugins/opensearch-security/securityconfig/internal_users.yml
+      # - ./roles_mapping.yml:/usr/share/opensearch/plugins/opensearch-security/securityconfig/roles_mapping.yml
+      # - ./tenants.yml:/usr/share/opensearch/plugins/opensearch-security/securityconfig/tenants.yml
+      # - ./roles.yml:/usr/share/opensearch/plugins/opensearch-security/securityconfig/roles.yml
+      # - ./action_groups.yml:/usr/share/opensearch/plugins/opensearch-security/securityconfig/action_groups.yml
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+      - "9600:9600" # required for Performance Analyzer

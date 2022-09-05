@@ -1,0 +1,16 @@
+staging.fidu.sg {
+	handle {
+		reverse_proxy nginx:80 {
+			# header_up Host {host} # redundant
+			header_up X-Real-IP {remote}
+			# header_up X-Forwarded-For {remote}  # redundant
+			# header_up X-Forwarded-Port {server_port} # redundant
+		}
+	}
+}
+
+api.staging.fidu.sg {
+	root * /app/laravel/public
+	php_fastcgi php_fpm:9000
+	file_server
+}

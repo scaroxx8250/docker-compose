@@ -1,0 +1,35 @@
+gaigai.com {
+	handle {
+		reverse_proxy nginx:80 {
+			# header_up Host {host} # redundant
+			header_up X-Real-IP {remote}
+			# header_up X-Forwarded-For {remote}  # redundant
+			# header_up X-Forwarded-Port {server_port} # redundant
+		}
+	}
+}
+
+www.gaigai.com {
+	redir https://gaigai.com{uri} permanent
+}
+
+api.gaigai.com {
+	root * /app/laravel/laravel/gaigai/public
+	php_fastcgi php_fpm:9000
+	file_server
+}
+
+api2.gaigai.com {
+	@staticfiles {
+		not path /static/*
+	}
+	reverse_proxy @staticfiles django:8000 {
+		# header_up Host {host} # redundant
+		header_up X-Real-IP {remote}
+		# header_up X-Forwarded-For {remote}  # redundant
+		# header_up X-Forwarded-Port {server_port} # redundant
+	}
+	file_server /static/* {
+		root /app/django
+	}
+}

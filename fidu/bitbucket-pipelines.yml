@@ -1,0 +1,57 @@
+image: atlassian/default-image:2
+pipelines:
+  branches:
+    production:
+      - step:
+          script:
+            - ssh bitbucket@$HOST_PRODUCTION "sudo chown -R bitbucket:google-sudoers $HOST_PRODUCTION_DIR"
+            # - ssh bitbucket@$HOST_PRODUCTION "sudo setfacl -R -d -m g::rwx -m o::r-x -m u::rwx $HOST_PRODUCTION_DIR"
+            - ssh bitbucket@$HOST_PRODUCTION "sudo chmod -R 775 $HOST_PRODUCTION_DIR"
+            - rsync -avzI --progress --exclude=".*" --exclude='storage/' --delete --rsh=ssh $BITBUCKET_CLONE_DIR/* bitbucket@$HOST_PRODUCTION:$HOST_PRODUCTION_DIR
+            - echo "Commit $BITBUCKET_COMMIT deployed at $(TZ=":Asia/Singapore" date)" > deployment_info.txt
+            - scp deployment_info.txt bitbucket@$HOST_PRODUCTION:$HOST_PRODUCTION_DIR
+            # t-pipelinekey@$HOST_PRODUCTION "cd $HOST_PRODUCTION_DIR; git reset --hard HEAD; git checkout -m production"
+            - ssh bitbucket@$HOST_PRODUCTION "cd $HOST_PRODUCTION_DIR; ./install_composer.sh"
+            - ssh bitbucket@$HOST_PRODUCTION "cd $HOST_PRODUCTION_DIR; php composer.phar install --no-dev"
+            - ssh bitbucket@$HOST_PRODUCTION "cd $HOST_PRODUCTION_DIR; php composer.phar clear-cache"
+            - ssh bitbucket@$HOST_PRODUCTION "cd $HOST_PRODUCTION_DIR; php composer.phar dump-autoload --optimize"
+            - ssh bitbucket@$HOST_PRODUCTION "cd $HOST_PRODUCTION_DIR; ./test_deploy.sh"
+            # - ssh bitbucket@$HOST_PRODUCTION "cd $HOST_PRODUCTION_DIR; php artisan config:cache; php artisan route:cache; php artisan view:cache"
+            - ssh bitbucket@$HOST_PRODUCTION "sudo chown -R 0:1001 $HOST_PRODUCTION_DIR"
+            - ssh bitbucket@$HOST_PRODUCTION "cd $HOST_PRODUCTION_DIR; sudo rm -rf storage/app/images/*; sudo chmod -R 777 storage; cd ../../; sudo docker-compose -f docker-compose.yml up -d"
+            - ssh bitbucket@$HOST_STAGING "sudo supervisorctl stop all"
+            - ssh bitbucket@$HOST_STAGING "sudo supervisorctl reread; sudo supervisorctl update"
+            - ssh bitbucket@$HOST_STAGING "sudo supervisorctl start all"
+      - step:
+          name: Sync production Opensearch with staging
+          script:
+            - ssh bitbucket@$HOST_PRODUCTION "cd $HOST_PRODUCTION_DIR; sudo php artisan opensearch:sync"
+    staging:
+      # - step:
+      #     name: Run tests
+      #     image: php:7
+      #     script:
+      #       - apt-get update
+      #       - apt-get install -y zip unzip
+      #       - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+      #       # - docker-php-ext-configure pcntl --enable-pcntl
+      #       # - composer update
+      #       - composer install  --no-dev
+      #       - artisan test --testsuite=Feature --stop-on-failure
+      - step:
+          name: Deploy to staging server
+          script:
+            - ssh bitbucket@$HOST_STAGING "sudo chown -R bitbucket:google-sudoers $HOST_STAGING_DIR"
+            # - ssh bitbucket@$HOST_STAGING "sudo setfacl -R -d -m g::rwx -m o::r-x -m u::rwx $HOST_STAGING_DIR"
+            - ssh bitbucket@$HOST_STAGING "sudo chmod -R 775 $HOST_STAGING_DIR"
+            - rsync -avzI --progress --exclude=".*" --exclude='storage/' --delete --rsh=ssh $BITBUCKET_CLONE_DIR/* bitbucket@$HOST_STAGING:$HOST_STAGING_DIR
+            - echo "Commit $BITBUCKET_COMMIT deployed at $(TZ=":Asia/Singapore" date)" > deployment_info.txt
+            - scp deployment_info.txt bitbucket@$HOST_STAGING:$HOST_STAGING_DIR
+            # - ssh bitbucket@$HOST_STAGING "cd $HOST_STAGING_DIR; git reset --hard HEAD; git fetch; git checkout -m staging"
+            - ssh bitbucket@$HOST_STAGING "cd $HOST_STAGING_DIR; ./install_composer.sh"
+            - ssh bitbucket@$HOST_STAGING "cd $HOST_STAGING_DIR; php composer.phar install --no-dev"
+            - ssh bitbucket@$HOST_STAGING "sudo chown -R 0:1001 $HOST_STAGING_DIR"
+            - ssh bitbucket@$HOST_STAGING "cd $HOST_STAGING_DIR; sudo rm -rf storage/app/images/*; sudo chmod -R 777 storage; cd ../../; sudo docker-compose -f docker-compose.yml up -d"
+            - ssh bitbucket@$HOST_STAGING "sudo supervisorctl stop all"
+            - ssh bitbucket@$HOST_STAGING "sudo supervisorctl reread; sudo supervisorctl update"
+            - ssh bitbucket@$HOST_STAGING "sudo supervisorctl start all"

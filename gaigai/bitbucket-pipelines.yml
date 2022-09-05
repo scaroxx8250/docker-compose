@@ -1,0 +1,25 @@
+image: atlassian/default-image
+pipelines:
+  branches:
+    staging:
+      - step:
+          name: Deploy to staging server
+          script: 
+            - ssh gaigai-staging-pipelines@$DEPLOYMENT_URL_STAGING "sudo chown -R gaigai-staging-pipelines:google-sudoers $HOST_STAGING_DIR"
+            - ssh gaigai-staging-pipelines@$DEPLOYMENT_URL_STAGING "sudo chmod -R 775 $HOST_STAGING_DIR"
+            - rsync -avzI --progress --exclude=".*" --rsh=ssh $BITBUCKET_CLONE_DIR/* gaigai-staging-pipelines@$DEPLOYMENT_URL_STAGING:$HOST_STAGING_DIR
+            - echo "Commit $BITBUCKET_COMMIT deployed at $(TZ=":Asia/Singapore" date)" > deployment_info.txt
+            - scp deployment_info.txt gaigai-staging-pipelines@$DEPLOYMENT_URL_STAGING:$HOST_STAGING_DIR
+            - ssh gaigai-staging-pipelines@$DEPLOYMENT_URL_STAGING "sudo chown -R gaigai-staging-pipelines:google-sudoers $HOST_STAGING_DIR"
+            - ssh gaigai-staging-pipelines@$DEPLOYMENT_URL_STAGING "cd $HOST_DOCKER_CONTAINER_DIR && sudo docker-compose -f docker-compose.yml restart django"
+    production:
+      - step: 
+          name: Deploy to production server
+          script: 
+            - ssh gaigai-staging-pipelines@$DEPLOYMENT_URL_PRODUCTION "sudo chown -R gaigai-staging-pipelines:google-sudoers $HOST_PRODUCTION_DIR"
+            - ssh gaigai-staging-pipelines@$DEPLOYMENT_URL_PRODUCTION "sudo chmod -R 775 $HOST_PRODUCTION_DIR"
+            - rsync -avzI --progress --exclude=".*" --rsh=ssh $BITBUCKET_CLONE_DIR/* gaigai-staging-pipelines@$DEPLOYMENT_URL_PRODUCTION:$HOST_PRODUCTION_DIR
+            - echo "Commit $BITBUCKET_COMMIT deployed at $(TZ=":Asia/Singapore" date)" > deployment_info.txt
+            - scp deployment_info.txt gaigai-staging-pipelines@$DEPLOYMENT_URL_PRODUCTION:$HOST_PRODUCTION_DIR
+            - ssh gaigai-staging-pipelines@$DEPLOYMENT_URL_PRODUCTION "sudo chown -R gaigai-staging-pipelines:google-sudoers $HOST_PRODUCTION_DIR"
+            - ssh gaigai-staging-pipelines@$DEPLOYMENT_URL_PRODUCTION "cd $HOST_PRODUCTION_DOCKER_CONTAINER_DIR && sudo docker-compose -f docker-compose.yml restart django"   
